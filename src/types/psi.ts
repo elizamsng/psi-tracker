@@ -16,6 +16,7 @@ export type PsiBandKey =
   | 'hazardous';
 
 export type ScenarioId =
+  | 'live'
   | 'clear_monsoon'
   | 'moderate_haze'
   | 'transboundary_alert'
@@ -76,35 +77,39 @@ export interface PsiSnapshot {
 
 /**
  * Exact response schema returned by Singapore's National Environment Agency (NEA)
- * via data.gov.sg (/v1/environment/psi). Ready for direct API integration.
+ * via data.gov.sg v2 (/v2/real-time/api/psi) and proxied through /api/psi.
  */
 export interface NEAPsiApiResponse {
-  region_metadata: Array<{
-    name: RegionId;
-    label_location: {
-      latitude: number;
-      longitude: number;
-    };
-  }>;
-  items: Array<{
-    timestamp: string;
-    update_timestamp: string;
-    readings: {
-      o3_sub_index: Record<RegionId, number>;
-      pm10_twenty_four_hourly: Record<RegionId, number>;
-      pm10_sub_index: Record<RegionId, number>;
-      co_sub_index: Record<RegionId, number>;
-      pm25_twenty_four_hourly: Record<RegionId, number>;
-      so2_sub_index: Record<RegionId, number>;
-      co_eight_hour_max: Record<RegionId, number>;
-      no2_one_hour_max: Record<RegionId, number>;
-      so2_twenty_four_hourly: Record<RegionId, number>;
-      pm25_sub_index: Record<RegionId, number>;
-      psi_twenty_four_hourly: Record<RegionId, number>;
-      o3_eight_hour_max: Record<RegionId, number>;
-    };
-  }>;
-  api_info: {
-    status: string;
+  code: number;
+  errorMsg?: string;
+  data: {
+    regionMetadata: Array<{
+      name: SpatialRegionId;
+      labelLocation: {
+        latitude: number;
+        longitude: number;
+      };
+    }>;
+    items: Array<{
+      date?: string;
+      timestamp: string;
+      updatedTimestamp?: string;
+      updateTimestamp?: string;
+      readings: {
+        psi_twenty_four_hourly: Record<SpatialRegionId, number>;
+        pm25_one_hourly?: Record<SpatialRegionId, number>;
+        pm25_twenty_four_hourly: Record<SpatialRegionId, number>;
+        pm25_sub_index: Record<SpatialRegionId, number>;
+        pm10_twenty_four_hourly: Record<SpatialRegionId, number>;
+        pm10_sub_index: Record<SpatialRegionId, number>;
+        o3_sub_index: Record<SpatialRegionId, number>;
+        o3_eight_hour_max: Record<SpatialRegionId, number>;
+        co_sub_index: Record<SpatialRegionId, number>;
+        co_eight_hour_max: Record<SpatialRegionId, number>;
+        so2_sub_index: Record<SpatialRegionId, number>;
+        so2_twenty_four_hourly: Record<SpatialRegionId, number>;
+        no2_one_hour_max: Record<SpatialRegionId, number>;
+      };
+    }>;
   };
 }

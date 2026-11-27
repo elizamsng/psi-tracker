@@ -21,8 +21,9 @@ import { HealthAdvisory } from './components/HealthAdvisory';
 import { ApiSchemaDrawer } from './components/ApiSchemaDrawer';
 
 export default function App() {
-  const [scenarioId, setScenarioId] = useState<ScenarioId>('moderate_haze');
+  const [scenarioId, setScenarioId] = useState<ScenarioId>('live');
   const [snapshot, setSnapshot] = useState<PsiSnapshot | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedRegionId, setSelectedRegionId] = useState<RegionId>('national');
   const [activeLayer, setActiveLayer] = useState<MetricLayer>('psi_twenty_four_hourly');
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -38,25 +39,27 @@ export default function App() {
     }
   }, [isDark]);
 
-  useEffect(() => {
-    let cancelled = false;
+  const loadSnapshot = async (targetScenario: ScenarioId, simulateJitter = false) => {
     setIsRefreshing(true);
-    fetchPsiSnapshot(scenarioId, false).then((data) => {
-      if (!cancelled) {
-        setSnapshot(data);
-        setIsRefreshing(false);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
+    setLoadError(null);
+    try {
+      const data = await fetchPsiSnapshot(targetScenario, simulateJitter);
+      setSnapshot(data);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unable to fetch Singapore PSI readings.';
+      setLoadError(message);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadSnapshot(scenarioId, false);
   }, [scenarioId]);
 
-  const handleSimulateTick = async () => {
-    setIsRefreshing(true);
-    const next = await fetchPsiSnapshot(scenarioId, true);
-    setSnapshot(next);
-    setIsRefreshing(false);
+  const handleRefresh = () => {
+    void loadSnapshot(scenarioId, scenarioId !== 'live');
   };
 
   const handleExportCsv = () => {
@@ -70,7 +73,35 @@ export default function App() {
       <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-[#0B0E14] dark:text-slate-100">
         <TopBar onOpenApiDrawer={() => setIsApiDrawerOpen(true)} />
         <main className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6">
-          <div className="h-32 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111722]" />
+          {loadError ? (
+            <div className="rounded-xl border border-rose-200 bg-white p-6 dark:border-rose-900/70 dark:bg-[#111722]">
+              <h1 className="font-display text-lg font-semibold text-slate-900 dark:text-slate-100">
+                Unable to load live NEA PSI data
+              </h1>
+              <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-300">{loadError}</p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => void loadSnapshot('live', false)}
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-sky-600 dark:hover:bg-sky-500 cursor-pointer"
+                >
+                  Retry Live Connection
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScenarioId('moderate_haze')}
+                  className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-[#0B0E14] dark:text-slate-200 cursor-pointer"
+                >
+                  Open Haze Simulation Preview
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="h-36 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111722]" />
+              <div className="h-96 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-[#111722]" />
+            </div>
+          )}
         </main>
       </div>
     );
@@ -80,7 +111,6 @@ export default function App() {
   const activeBand = getPsiBand(activeRegion.metrics.psi_twenty_four_hourly);
   const activePm25Band = getPm25HourlyBand(activeRegion.metrics.pm25_one_hourly);
 
-  // Determine peak regional station for quick comparative context
   const peakRegion = REGION_ORDER.map((id) => snapshot.regions[id]).reduce((highest, curr) =>
     curr.metrics.psi_twenty_four_hourly > highest.metrics.psi_twenty_four_hourly ? curr : highest
   );
@@ -93,7 +123,7 @@ export default function App() {
       <WorkspaceToolbar
         scenarioId={scenarioId}
         onScenarioChange={setScenarioId}
-        onRefresh={handleSimulateTick}
+        onRefresh={handleRefresh}
         onExportCsv={handleExportCsv}
         isRefreshing={isRefreshing}
         updatedAtSgt={snapshot.updatedAtSgt}
@@ -102,6 +132,24 @@ export default function App() {
       />
 
       <main className="mx-auto max-w-[1440px] space-y-6 px-4 py-6 sm:px-6">
+        {loadError && (
+          <div
+            role="status"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/70 px-5 py-3 text-xs text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-200"
+          >
+            <span>
+              Live refresh failed ({loadError}). Showing most recent loaded readings.
+            </span>
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="font-semibold underline underline-offset-2 cursor-pointer"
+            >
+              Retry now
+            </button>
+          </div>
+        )}
+
         {/* Overview Hero & 4-Column Telemetry Strip */}
         <section
           id="overview"
@@ -114,7 +162,11 @@ export default function App() {
                 <span aria-hidden="true">·</span>
                 <span>{snapshot.scenarioLabel}</span>
                 <span aria-hidden="true">·</span>
-                <span>Preview Dataset</span>
+                <span>
+                  {snapshot.sourceMode === 'live_api'
+                    ? 'Connected via /api/psi'
+                    : 'Simulation Preview'}
+                </span>
               </div>
               <h1 className="mt-1.5 font-display text-2xl font-bold tracking-tight text-slate-900 [text-wrap:balance] sm:text-3xl dark:text-slate-100">
                 Live PSI &amp; Regional Haze Tracker
@@ -263,8 +315,8 @@ export default function App() {
       <footer className="mt-8 border-t border-slate-200 bg-white dark:border-slate-800 dark:bg-[#0F141D]">
         <div className="mx-auto flex max-w-[1440px] flex-wrap items-center justify-between gap-4 px-4 py-5 text-xs text-slate-500 sm:px-6 dark:text-slate-400">
           <span>
-            SG Airwatch · PSI band definitions follow Singapore National Environment Agency (NEA)
-            air quality guidelines.
+            SG Airwatch · Live PSI telemetry sourced from Singapore National Environment Agency
+            (NEA) via Data.gov.sg.
           </span>
           <button
             type="button"
