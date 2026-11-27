@@ -1,0 +1,6 @@
+{
+  "name": "SG Airwatch",
+  "description": "Real-time Singapore PSI and regional haze monitoring console across North, South, East, West, and Central stations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
